@@ -13,10 +13,6 @@ def positional_encoding(seq_len, d_model):
     return pe
 
 
-def layer_norm(x, eps=1e-6):
-    mean = x.mean(axis=-1, keepdims=True)
-    std = x.std(axis=-1, keepdims=True)
-    return (x - mean) / (std + eps)
 
 
 def softmax(x, axis=-1):
@@ -65,7 +61,7 @@ class multi_head_attention():
         d_L / d_attn = d_L / d_out * d_out / d_attn = V.T
         # attn  = softmax((Q @ K.T) / np.sqrt(d_head))
         # softmax backpropagation:
-        
+
         """
         
         
