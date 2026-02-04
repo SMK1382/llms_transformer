@@ -2,6 +2,7 @@ import numpy as np
 
 
 
+#####################################################################################
 def positional_encoding(X):
     batch, seq_len, d_model = X.shape
     for i in range(batch):
@@ -13,28 +14,30 @@ def positional_encoding(X):
     return X
 
 
+#####################################################################################
 def softmax(x, axis=-1):
     x = x - np.max(x, axis=axis, keepdims=True)
     exp_x = np.exp(x)
     return exp_x / np.sum(exp_x, axis=axis, keepdims=True)
 
 
+#####################################################################################
 def softmax_backward(A, dA):
     # A, dA: (self.batch_size, self.n_head, self.seq_len, self.d_head)
     temp = np.sum(A * dA, axis=-1, keepdims=True)
     dS = A * (dA - temp)
     return dS
-#############################################################################################
 
+
+#####################################################################################
 class add_and_norm:
-    def init(self, d_model, eps=1e-5,learning_rate = 0.1):
+    def __init__(self, d_model, eps=1e-5,learning_rate = 0.1):
         """
         X     : (B, N, d_model)   residual input
         gamma : (d_model,)
         beta  : (d_model,)
         """
         self.X = None
-        self.batch_size, self.seq_len, self.d_model = X.shape
         self.gamma = np.ones(d_model)
         self.beta = np.ones(d_model)
         self.eps = eps
@@ -49,6 +52,7 @@ class add_and_norm:
 
     def get_input(self, X):
         self.X = X
+        self.batch_size, self.seq_len, self.d_model = X.shape
     # ==================================================
     # Forward
     # ==================================================
@@ -107,16 +111,15 @@ class add_and_norm:
         return d_X, d_Sublayer
 
 
-
-
+#####################################################################################
 class multi_head_attention:
-    def init(self, d_model, n_head, learning_rate = 0.1, encoder=False, mask=False):
-        self.W_Q = np.random.random(d_model, d_model)                              # (d_model, d_model)
-        self.W_K = np.random.random(d_model, d_model)
-        self.W_V = np.random.random(d_model, d_model)
-        self.W_O = np.random.random(d_model, d_model)
+    def __init__(self, d_model, n_head, learning_rate = 0.1, encoder=False, mask=False):
+        self.W_Q = np.random.random((d_model, d_model))                              # (d_model, d_model)
+        self.W_K = np.random.random((d_model, d_model))
+        self.W_V = np.random.random((d_model, d_model))
+        self.W_O = np.random.random((d_model, d_model))
         self.alph = learning_rate
-        self.d_head = self.d_model // self.n_head
+        self.d_head = d_model // n_head
         self.n_head = n_head
         self.mask = mask
         self.encoder = encoder
@@ -223,11 +226,7 @@ class multi_head_attention:
         return d_X
 
 
-
-
-
 #####################################################################################
-
 class feed_forward:
     def __init__(self, d_model):
         """
@@ -237,10 +236,10 @@ class feed_forward:
         W_2 : (d_ff, d_model)
         b_2 : (d_model,)
         """
-        self.W_1 = np.random.random(d_model, 8)
-        self.b_1 = np.random.random(8)
-        self.W_2 = np.random.random(8, d_model)
-        self.b_2 = np.random.random(d_model)
+        self.W_1 = np.random.random((d_model, 8))
+        self.b_1 = np.random.random((8))
+        self.W_2 = np.random.random((8, d_model))
+        self.b_2 = np.random.random((d_model))
         self.X = None
 
         # cache
@@ -298,6 +297,7 @@ class feed_forward:
 
         return dX, dW_1, db_1, dW_2, db_2
 
+#####################################################################################
 class Linear:
     def __init__(self, d_in, d_out, learning_rate=0.1):
         self.W = np.random.randn(d_in, d_out) * 0.1
@@ -316,12 +316,12 @@ class Linear:
         return : (B, N, d_out)
         """
         self.X = X
-        B, N, D_in = X.shape
+        self.batch_size, self.seq_len, self.d_model = X.shape
 
-        X_flat = X.reshape(B * N, D_in)
+        X_flat = X.reshape(self.batch_size * self.seq_len, self.d_model)
         out = X_flat @ self.W + self.b
 
-        return out.reshape(B, N, -1)
+        return out.reshape(self.batch_size, self.seq_len, -1)
 
     # =====================================
     # Backward
@@ -331,10 +331,10 @@ class Linear:
         d_out : (B, N, d_out)
         return dX : (B, N, d_in)
         """
-        B, N, D_out = d_out.shape
+        self.batch_size, self.seq_len, self.d_model = d_out.shape
         D_in = self.W.shape[0]
 
-        d_out_flat = d_out.reshape(B * N, D_out)
+        d_out_flat = d_out.reshape(self.batch_size * self.seq_len, self.seq_len)
         X_flat = self.X.reshape(B * N, D_in)
 
         # gradients
@@ -346,30 +346,9 @@ class Linear:
         self.W -= self.lr * dW
         self.b -= self.lr * db
 
-        return dX.reshape(B, N, D_in)
+        return dX.reshape(self.batch_size, self.seq_len, self.d_model)
 
 #####################################################################################
-
-
-def Encoder(X_input, n_head, K, Q, V, neural_network):
-    d_attention = d_model / n_head
-    X_input = positional_enconding(X_input)
-    Attention = attention_process(X_input, Q, K, V, batch, d_model, seq_len, n_head, d_attention)
-    X_input = add_norm(X_input, Attention)
-    output_neural_network = neural_network(neural_network, X_input)
-    X_input = add_norm(X_input, output_neural_network)
-    return X_input
-
-
-def Decoder(mode, output_Encoder, batch, d_model, n_head, K, Q, V, neural_network, token_right):
-    if mode == 0:
-        d_attention = d_model / n_head
-        output_Encoder = positional_enconding(X_input)
-        Attention = attention_process(output_Encoder, Q, K, V, batch, d_model, seq_len, n_head, d_attention)
-        output_Encoder = add_norm(output_Encoder, Attention)
-    pass
-
-
 def forward(X, multi_head_attention_1, multi_head_attention_2, masked_multi_head_attention, feed_forward_1, feed_forward_2, norm_1, norm_2, norm_3, norm_4, norm_5):
     #Encoder
     X_1 = X_2 = positional_encoding(X)
@@ -381,26 +360,60 @@ def forward(X, multi_head_attention_1, multi_head_attention_2, masked_multi_head
     X_2 = feed_forward.forward()
     norm_2.get_input(X_2)
     X_1 = X_2 = norm_2.forward(X_1)
+
     #======================================
 
-#####################################################################
-def transformer(X_input, n_head, epoch):
-    batch, seq_len, d_model = X_input.shape
-    multi_head_attention_1 = multi_head_attention(d_model, n_head)
-    multi_head_attention_2 = multi_head_attention(d_model, n_head, encoder=True)
-    masked_multi_head_attention = multi_head_attention(d_model, n_head, mask=True)
-    feed_forward_1 = feed_forward(d_model)
-    feed_forward_2 = feed_forward(d_model)
-    norm_1 = add_and_norm(d_model)
-    norm_2 = add_and_norm(d_model)
-    norm_3 = add_and_norm(d_model)
-    norm_4 = add_and_norm(d_model)
-    norm_5 = add_and_norm(d_model)
-    for i in range(epoch):
-        loss = forward(X, n_head, multi_head_attention_1, multi_head_attention_2, masked_multi_head_attention, feed_forward_1, feed_forward_2, norm_1, norm_2, norm_3, norm_4, norm_5)
-        backward(loss)
-            #back_propagation(loss)
+#####################################################################################
+class transformer:
+    def __init__(self, d_model, n_head):
+        self.d_model = d_model
+        self.n_head = n_head
+        self.multi_head_attention_1 = multi_head_attention(d_model=d_model, n_head=n_head)
+        self.multi_head_attention_2 = multi_head_attention(d_model, n_head, encoder=True)
+        self.masked_multi_head_attention = multi_head_attention(d_model, n_head, mask=True)
+        self.feed_forward_1 = feed_forward(d_model)
+        self.feed_forward_2 = feed_forward(d_model)
+        self.norm_1 = add_and_norm(d_model)
+        self.norm_2 = add_and_norm(d_model)
+        self.norm_3 = add_and_norm(d_model)
+        self.norm_4 = add_and_norm(d_model)
+        self.norm_5 = add_and_norm(d_model)
+
+    def train(self, X, epoch):
+        for i in range(epoch):
+            loss = forward(X, self.n_head, self.multi_head_attention_1, self.multi_head_attention_2, self.masked_multi_head_attention, self.feed_forward_1, self.feed_forward_2, self.norm_1, self.norm_2, self.norm_3, self.norm_4, self.norm_5)
+            backward(loss)
+    
+    def inference(self, X):
+        pass
 
 
+x = transformer(512, 8)
+"""
+I love cats.
+The capital of Iran is Tehran.
+My name is Mohammadreza.
+"""
+pad = np.zeros((1, 512))
 
+np.random.seed(7)
 
+I = np.random.random((1, 512))
+love = np.random.random((1, 512)) 
+cats = np.random.random((1, 512)) 
+
+The = np.random.random((1, 512)) 
+capital = np.random.random((1, 512)) 
+of = np.random.random((1, 512)) 
+Iran = np.random.random((1, 512)) 
+_is = np.random.random((1, 512)) 
+Tehran = np.random.random((1, 512)) 
+
+My = np.random.random((1, 512)) 
+name = np.random.random((1, 512)) 
+_is = np.random.random((1, 512)) 
+Mohammadreza = np.random.random((1, 512)) 
+
+token = np.array([[I, love, cats, pad, pad, pad], [The, capital, of, Iran, _is, Tehran], [My, name, _is, Mohammadreza, pad, pad]])
+
+print(len(np.max(token, axis=-1)))
