@@ -1,5 +1,5 @@
 import numpy as np
-
+import pandas as pd
 
 
 #####################################################################################
@@ -113,7 +113,7 @@ class add_and_norm:
 
 #####################################################################################
 class multi_head_attention:
-    def __init__(self, d_model, n_head, learning_rate = 0.1, encoder=False, mask=False):
+    def __init__(self, d_model, n_head, learning_rate = 0.1, decoder=False, mask=False):
         self.W_Q = np.random.random((d_model, d_model))                              # (d_model, d_model)
         self.W_K = np.random.random((d_model, d_model))
         self.W_V = np.random.random((d_model, d_model))
@@ -122,7 +122,7 @@ class multi_head_attention:
         self.d_head = d_model // n_head
         self.n_head = n_head
         self.mask = mask
-        self.encoder = encoder
+        self.decoder = decoder
 
 
         self.X = None                                 # (self.batch_size, self.seq_len, d_model)
@@ -139,19 +139,26 @@ class multi_head_attention:
     # ==================================================
     # Forward
     # ==================================================
-    def attention_forward(self):
+    def attention_forward(self, padding_mask):
         self.batch_size, self.seq_len, D = self.batch_size, self.seq_len, self.d_model
         self.n_head, self.d_head = self.n_head, self.d_head
-
-        Q = self.X @ self.W_Q # (self.batch_size, self.seq_len, D)
-        K = self.X @ self.W_K
-        V = self.X @ self.W_V
-
-        Q = Q.reshape(self.batch_size, self.seq_len, self.n_head, self.d_head).transpose(0, 2, 1, 3)  # (self.batch_size, H, self.seq_len, self.d_head)
-        K = K.reshape(self.batch_size, self.seq_len, self.n_head, self.d_head).transpose(0, 2, 1, 3)
-        V = V.reshape(self.batch_size, self.seq_len, self.n_head, self.d_head).transpose(0, 2, 1, 3)
+        
+        if self.decoder:
+            Q = self.X[0] @ self.W_Q # (self.batch_size, self.seq_len, D)
+            K = self.X[0] @ self.W_K
+            V = self.X[1] @ self.W_V
+        else:
+            Q = Q.reshape(self.batch_size, self.seq_len, self.n_head, self.d_head).transpose(0, 2, 1, 3)  # (self.batch_size, H, self.seq_len, self.d_head)
+            K = K.reshape(self.batch_size, self.seq_len, self.n_head, self.d_head).transpose(0, 2, 1, 3)
+            V = V.reshape(self.batch_size, self.seq_len, self.n_head, self.d_head).transpose(0, 2, 1, 3)
 
         scores = Q @ K.transpose(0, 1, 3, 2) / np.sqrt(self.d_head)  # (self.batch_size, self.n_head, self.seq_len, self.d_head)
+
+
+        if padding_mask is not None:
+            mask_expanded = padding_mask[:, np.newaxis, np.newaxis, :]
+            scores = np.where(mask_expanded == 1, scores, -1e9)
+
 
         if self.mask is not False:
             mask = np.tril(np.ones(self.seq_len, self.seq_len), k=0)
@@ -220,7 +227,7 @@ class multi_head_attention:
         # ---------- dX ----------
         d_X = (d_Q @ self.W_Q.T + d_K @ self.W_K.T + d_V @ self.W_V.T).reshape(self.batch_size, self.seq_len, self.d_model)
 
-        if encoder:
+        if self.decoder:
             return (d_Q @ self.W_Q.T + d_K @ self.W_K.T).reshape(self.batch_size, self.seq_len, self.d_model),  (d_V @ self.W_V.T).reshape(self.batch_size, self.seq_len, self.d_model)
 
         return d_X
@@ -299,8 +306,8 @@ class feed_forward:
 
 #####################################################################################
 class Linear:
-    def __init__(self, d_in, d_out, learning_rate=0.1):
-        self.W = np.random.randn(d_in, d_out) * 0.1
+    def __init__(self, d_model, d_out=100, learning_rate=0.1):
+        self.W = np.random.randn(d_model, d_out) * 0.1
         self.b = np.zeros(d_out)
         self.lr = learning_rate
 
@@ -349,17 +356,35 @@ class Linear:
         return dX.reshape(self.batch_size, self.seq_len, self.d_model)
 
 #####################################################################################
-def forward(X, multi_head_attention_1, multi_head_attention_2, masked_multi_head_attention, feed_forward_1, feed_forward_2, norm_1, norm_2, norm_3, norm_4, norm_5):
+def forward(X, multi_head_attention_1, multi_head_attention_2, masked_multi_head_attention, padding_mask, feed_forward_1, feed_forward_2, norm_1, norm_2, norm_3, norm_4, norm_5, linear):
     #Encoder
     X_1 = X_2 = positional_encoding(X)
     multi_head_attention_1.get_input(X_2)
-    X_2 = multi_head_attention_1.forward()
+    X_2 = multi_head_attention_1.forward(padding_mask)
     norm_1.get_input(X_2)
     X_1 = X_2 = norm_1.forward(X_1)
-    feed_forward.get_input(X_2)
-    X_2 = feed_forward.forward()
+    feed_forward_1.get_input(X_2)
+    X_2 = feed_forward_1.forward()
     norm_2.get_input(X_2)
-    X_1 = X_2 = norm_2.forward(X_1)
+    out_put_encoder = norm_2.forward(X_1)
+    #Decoder
+    X_1 = X_2 = positional_encoding(X)
+    masked_multi_head_attention.get_input(X_2)
+    X_2 = masked_multi_head_attention.forward(padding_mask)
+    norm_3.get_input(X_2)
+    X_1 = X_2 = norm_3.forward(X_1)
+    multi_head_attention_2.get_input(np.array([out_put_encoder, X_2]))
+    X_2 = multi_head_attention_2.forward(padding_mask)
+    norm_4.get_input(X_2)
+    X_1 = X_2 = norm_4.forward(X_1)
+    feed_forward_2.get_input(X_2)
+    X_2 = feed_forward_2.forward()
+    norm_5.get_input(X_2)
+    X_2 = norm_5.forward(X_1)
+    X_1 = linear.forward(X_2)
+
+
+    
 
     #======================================
 
@@ -369,7 +394,7 @@ class transformer:
         self.d_model = d_model
         self.n_head = n_head
         self.multi_head_attention_1 = multi_head_attention(d_model=d_model, n_head=n_head)
-        self.multi_head_attention_2 = multi_head_attention(d_model, n_head, encoder=True)
+        self.multi_head_attention_2 = multi_head_attention(d_model, n_head, decoder=True)
         self.masked_multi_head_attention = multi_head_attention(d_model, n_head, mask=True)
         self.feed_forward_1 = feed_forward(d_model)
         self.feed_forward_2 = feed_forward(d_model)
@@ -378,42 +403,83 @@ class transformer:
         self.norm_3 = add_and_norm(d_model)
         self.norm_4 = add_and_norm(d_model)
         self.norm_5 = add_and_norm(d_model)
+        self.linear = Linear(d_model)
+
+
 
     def train(self, X, epoch):
         for i in range(epoch):
-            loss = forward(X, self.n_head, self.multi_head_attention_1, self.multi_head_attention_2, self.masked_multi_head_attention, self.feed_forward_1, self.feed_forward_2, self.norm_1, self.norm_2, self.norm_3, self.norm_4, self.norm_5)
+            loss = forward(X, self.n_head, self.multi_head_attention_1, self.multi_head_attention_2, self.masked_multi_head_attention, self.feed_forward_1, self.feed_forward_2, self.norm_1, self.norm_2, self.norm_3, self.norm_4, self.norm_5, self.linear)
             backward(loss)
     
+
+
+
     def inference(self, X):
         pass
 
 
-x = transformer(512, 8)
-"""
-I love cats.
-The capital of Iran is Tehran.
-My name is Mohammadreza.
-"""
-pad = np.zeros((1, 512))
 
+#===================================================================================================================================
 np.random.seed(7)
+d_model = 512
+n_head = 8
 
-I = np.random.random((1, 512))
-love = np.random.random((1, 512)) 
-cats = np.random.random((1, 512)) 
 
-The = np.random.random((1, 512)) 
-capital = np.random.random((1, 512)) 
-of = np.random.random((1, 512)) 
-Iran = np.random.random((1, 512)) 
-_is = np.random.random((1, 512)) 
-Tehran = np.random.random((1, 512)) 
+pad_vector = np.random.random((1, d_model))
+BOS_vector = np.random.random((1, d_model))
+EOS_vector = np.random.random((1, d_model))
 
-My = np.random.random((1, 512)) 
-name = np.random.random((1, 512)) 
-_is = np.random.random((1, 512)) 
-Mohammadreza = np.random.random((1, 512)) 
+with open("vocabulary.txt", 'r') as file:
+    vocabulary = np.array(file.read().lower().split("\n"))
+    file.close()
 
-token = np.array([[I, love, cats, pad, pad, pad], [The, capital, of, Iran, _is, Tehran], [My, name, _is, Mohammadreza, pad, pad]])
 
-print(len(np.max(token, axis=-1)))
+with open("samples.txt", 'r') as file:
+    samples = file.read().lower().split(".\n")
+    file.close()
+
+print(vocabulary)
+
+print("*" * 100)
+
+
+
+X_input = []
+target = []
+for i in range(0, len(samples) - 1):
+    X_input.append(["<bos>"] + samples[i].split(" "))
+    target.append(samples[i].split(" ") + ["<eos>"])
+
+print(X_input)
+
+
+print("*" * 100)
+
+print(target)
+x = transformer(d_model, n_head)
+
+
+#print(max(len(s) for s in tokens))
+  
+#pad = np.zeros((1, 512))
+
+
+#I = np.random.random((1, 512))
+#love = np.random.random((1, 512)) 
+#cats = np.random.random((1, 512)) 
+
+#The = np.random.random((1, 512)) 
+#capital = np.random.random((1, 512)) 
+#of = np.random.random((1, 512)) 
+#Iran = np.random.random((1, 512)) 
+#_is = np.random.random((1, 512)) 
+#Tehran = np.random.random((1, 512)) 
+
+#My = np.random.random((1, 512)) 
+#name = np.random.random((1, 512)) 
+#_is = np.random.random((1, 512)) 
+#Mohammadreza = np.random.random((1, 512)) 
+
+#tokens = np.array([[I, love, cats, pad, pad, pad], [The, capital, of, Iran, _is, Tehran], [My, name, _is, Mohammadreza, pad, pad]])
+
