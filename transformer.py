@@ -299,7 +299,7 @@ def padding(x):
         temp.append(i + ['<pad>'] * (max_len - len(i)))
     return np.array(temp), np.where(np.array(temp) == '<pad>', 0, 1)
 
-
+#####################################################################################
 def cross_entropy_with_grad(vocabulary, target_model, output_model):
     B, T, V = output_model.shape
 
@@ -322,6 +322,7 @@ def cross_entropy_with_grad(vocabulary, target_model, output_model):
     return loss, grad
 
 
+#####################################################################################
 def input_embedding(input_model, embedding):
     result = np.zeros((input_model.shape[0], input_model.shape[1], len(list(embedding.values())[0])))
     for b in range(input_model.shape[0]):
@@ -380,8 +381,7 @@ def backward_train(grad,
                    feed_forward_1, feed_forward_2, norm_1, norm_2, norm_3, norm_4, norm_5,
                    linear, softmax_layer):
 
-    X = softmax_layer.softmax_backward(grad)
-    X = linear.backward(X)
+    X = linear.backward(grad)
 
     X, sub_layer = norm_5.backward(X)
     X = feed_forward_2.backward(X)
@@ -484,5 +484,5 @@ if __name__ == "__main__":
 
     input_model = input_embedding(input_model, embedding).reshape(input_model.shape[0], input_model.shape[1], d_model)
 
-    transformer_model = transformer(d_model, n_head, vocabulary, learning_rate=0.1)
+    transformer_model = transformer(d_model, n_head, vocabulary, learning_rate=0.01)
     transformer_model.train(input_model, target_model, vocabulary, padding_matrix, 50)
