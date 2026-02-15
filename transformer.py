@@ -386,17 +386,27 @@ def backward_train(grad,
     X, sub_layer = norm_5.backward(X)
     X = feed_forward_2.backward(X)
     X, sub_layer = norm_4.backward(X + sub_layer)
+#--------------------------------------------------------------------------------------
+    #X, sub_layer_2 = multi_head_attention_2.attention_backward(X + sub_layer)
+    #X, sub_layer = norm_3.backward(X + sub_layer_2)
 
-    X, sub_layer_2 = multi_head_attention_2.attention_backward(X + sub_layer)
-    X, sub_layer = norm_3.backward(X + sub_layer_2)
+    #X = masked_multi_head_attention.attention_backward(X + sub_layer)
+    #X, sub_layer = norm_2.backward(X)
 
-    X = masked_multi_head_attention.attention_backward(X + sub_layer)
-    X, sub_layer = norm_2.backward(X)
+    #X = feed_forward_1.backward(X)
+    #X, sub_layer = norm_1.backward(X + sub_layer)
 
+    #X = multi_head_attention_1.attention_backward(X + sub_layer)
+#--------------------------------------------------------------------------------------
+    X_1, sub_layer_2 = multi_head_attention_2.attention_backward(X)
+
+    X, sub_layer = norm_3.backward(sub_layer + sub_layer_2)
+    X = masked_multi_head_attention.attention_backward(X)
+    
+    X, sub_layer = norm_2.backward(X_1)
     X = feed_forward_1.backward(X)
     X, sub_layer = norm_1.backward(X + sub_layer)
-
-    X = multi_head_attention_1.attention_backward(X + sub_layer)
+    X = multi_head_attention_1.attention_backward(X)
 
 
 #####################################################################################
@@ -448,7 +458,7 @@ class transformer:
 
 #####################################################################################
 if __name__ == "__main__":
-    batch_size = 5
+    batch_size = 3
     d_model = 512
     n_head = 8
 
@@ -474,5 +484,5 @@ if __name__ == "__main__":
 
     input_model = input_embedding(input_model, embedding).reshape(input_model.shape[0], input_model.shape[1], d_model)
 
-    transformer_model = transformer(d_model, n_head, vocabulary, learning_rate=0.01)
-    transformer_model.train(input_model, target_model, vocabulary, padding_matrix, 500)
+    transformer_model = transformer(d_model, n_head, vocabulary, learning_rate=0.1)
+    transformer_model.train(input_model, target_model, vocabulary, padding_matrix, 50)
