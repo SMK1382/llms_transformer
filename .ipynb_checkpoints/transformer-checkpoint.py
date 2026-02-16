@@ -14,6 +14,8 @@ def positional_encoding(X):
             for j in range(1, d_model, 2):
                 X[i, pos, j] += np.cos(pos / (10000 ** (2 * (j-1) / d_model)))
     return X
+
+
 #####################################################################################
 class softmax:
     def __init__(self):
